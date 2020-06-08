@@ -26,17 +26,18 @@
 #include "driver/rtc_io.h"
 #include "keyboard_config.h"
 #include "esp_sleep.h"
-#include "esp_log.h"
+//#include "esp_log.h"
 #define GPIO_TAG "GPIO"
 /* Define pins, notice that:
  * GPIO6-11 are usually used for SPI flash
  * GPIO34-39 can only be set as input mode and do not have software pullup or pulldown functions.
  * GPIOS 0,2,4,12-15,25-27,32-39 Can be used as RTC GPIOS as well (please read about power management in ReadMe)
  */
-const gpio_num_t MATRIX_ROWS_PINS[] = { GPIO_NUM_0, GPIO_NUM_2, GPIO_NUM_4,
-		GPIO_NUM_12, GPIO_NUM_13, GPIO_NUM_14 };
-const gpio_num_t MATRIX_COLS_PINS[] = { GPIO_NUM_15, GPIO_NUM_25, GPIO_NUM_26,
-		GPIO_NUM_27, GPIO_NUM_32, GPIO_NUM_33 };
+const gpio_num_t MATRIX_ROWS_PINS[] = { GPIO_NUM_16, GPIO_NUM_17, GPIO_NUM_18,
+		GPIO_NUM_19, GPIO_NUM_21, GPIO_NUM_22 };
+const gpio_num_t MATRIX_COLS_PINS[] = { GPIO_NUM_2, GPIO_NUM_4, GPIO_NUM_5,
+		GPIO_NUM_12, GPIO_NUM_13, GPIO_NUM_14, GPIO_NUM_15, GPIO_NUM_23, GPIO_NUM_25, GPIO_NUM_26,
+		GPIO_NUM_27, GPIO_NUM_32, GPIO_NUM_33, GPIO_NUM_34, GPIO_NUM_35, GPIO_NUM_36, GPIO_NUM_39};
 
 // matrix states
 uint8_t MATRIX_STATE[MATRIX_ROWS][MATRIX_COLS] = { 0 };
@@ -88,12 +89,15 @@ void rtc_matrix_setup(void) {
 
 		if (rtc_gpio_is_valid_gpio(MATRIX_COLS_PINS[col]) == 1) {
 			rtc_gpio_init((MATRIX_COLS_PINS[col]));
-			rtc_gpio_set_direction(MATRIX_COLS_PINS[col],
+			if (col < 13) {
+				rtc_gpio_set_direction(MATRIX_COLS_PINS[col],
 					RTC_GPIO_MODE_INPUT_OUTPUT);
-			rtc_gpio_set_level(MATRIX_COLS_PINS[col], 1);
-
-			ESP_LOGI(GPIO_TAG,"%d is level %d", MATRIX_COLS_PINS[col],
-					gpio_get_level(MATRIX_COLS_PINS[col]));
+				rtc_gpio_set_level(MATRIX_COLS_PINS[col], 1);
+			}
+			else {
+				rtc_gpio_set_direction(MATRIX_COLS_PINS[col],
+					RTC_GPIO_MODE_INPUT_ONLY);
+			}
 		}
 	}
 
@@ -109,9 +113,6 @@ void rtc_matrix_setup(void) {
 			rtc_gpio_set_level(MATRIX_ROWS_PINS[row], 0);
 			rtc_gpio_wakeup_enable(MATRIX_ROWS_PINS[row], GPIO_INTR_HIGH_LEVEL);
 			SET_BIT(rtc_mask, MATRIX_ROWS_PINS[row]);
-
-			ESP_LOGI(GPIO_TAG,"%d is level %d", MATRIX_ROWS_PINS[row],
-					gpio_get_level(MATRIX_ROWS_PINS[row]));
 		}
 		esp_sleep_enable_ext1_wakeup(rtc_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
 	}
@@ -127,9 +128,6 @@ void matrix_setup(void) {
 		gpio_pad_select_gpio(MATRIX_COLS_PINS[col]);
 		gpio_set_direction(MATRIX_COLS_PINS[col], GPIO_MODE_INPUT_OUTPUT);
 		gpio_set_level(MATRIX_COLS_PINS[col], 0);
-
-		ESP_LOGI(GPIO_TAG,"%d is level %d", MATRIX_COLS_PINS[col],
-				gpio_get_level(MATRIX_COLS_PINS[col]));
 	}
 
 	// Initializing rows
@@ -139,9 +137,6 @@ void matrix_setup(void) {
 		gpio_set_direction(MATRIX_ROWS_PINS[row], GPIO_MODE_INPUT_OUTPUT);
 		gpio_set_drive_capability(MATRIX_ROWS_PINS[row], GPIO_DRIVE_CAP_0);
 		gpio_set_level(MATRIX_ROWS_PINS[row], 0);
-
-		ESP_LOGI(GPIO_TAG,"%d is level %d", MATRIX_ROWS_PINS[row],
-				gpio_get_level(MATRIX_ROWS_PINS[row]));
 	}
 #endif
 #ifdef ROW2COL
@@ -151,18 +146,20 @@ void matrix_setup(void) {
 		gpio_pad_select_gpio(MATRIX_ROWS_PINS[row]);
 		gpio_set_direction(MATRIX_ROWS_PINS[row], GPIO_MODE_INPUT_OUTPUT);
 		gpio_set_level(MATRIX_ROWS_PINS[row], 0);
-		ESP_LOGI(GPIO_TAG,"%d is level %d",MATRIX_ROWS_PINS[row],gpio_get_level(MATRIX_ROWS_PINS[row]));
 	}
 
 	// Initializing columns
 	for(uint8_t col=0; col < MATRIX_COLS; col++) {
 
 		gpio_pad_select_gpio(MATRIX_COLS_PINS[col]);
-		gpio_set_direction(MATRIX_COLS_PINS[col], GPIO_MODE_INPUT_OUTPUT);
-		gpio_set_drive_capability(MATRIX_COLS_PINS[col],GPIO_DRIVE_CAP_0);
-		gpio_set_level(MATRIX_COLS_PINS[col], 0);
-
-		ESP_LOGI(GPIO_TAG,"%d is level %d",MATRIX_COLS_PINS[col],gpio_get_level(MATRIX_COLS_PINS[col]));
+		if (col < 13) {
+			gpio_set_direction(MATRIX_COLS_PINS[col], GPIO_MODE_INPUT_OUTPUT);
+			gpio_set_drive_capability(MATRIX_COLS_PINS[col],GPIO_DRIVE_CAP_0);
+			gpio_set_level(MATRIX_COLS_PINS[col], 0);
+		}
+		else {
+			gpio_set_direction(MATRIX_COLS_PINS[col], GPIO_MODE_INPUT);
+		}
 	}
 #endif
 }
@@ -195,9 +192,9 @@ void scan_matrix(void) {
 
 #endif
 #ifdef ROW2COL
-	// Setting row pin as low, and checking if the input of a column pin changes.
+	// Setting row pin as high, and checking if the input of a column pin changes.
 	for(uint8_t row=0; row < MATRIX_ROWS; row++) {
-		gpio_set_level(MATRIX_ROWS_PINS[row], 0);
+		gpio_set_level(MATRIX_ROWS_PINS[row], 1);
 
 		for(uint8_t col=0; col <MATRIX_COLS; col++) {
 
